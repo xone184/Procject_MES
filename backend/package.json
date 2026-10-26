@@ -19,9 +19,5 @@
     "multer": "^2.2.0",
     "pg": "^8.13.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
-  },
-  "devDependencies": {
-    "chromedriver": "^151.0.5",
-    "selenium-webdriver": "^4.51.0"
   }
 }
